@@ -1,36 +1,71 @@
 // src/background/service_worker.js
+import StrategyFactory from './strategies/StrategyFactory.js';
+
 console.log("⚙️ Background Service Worker đã sẵn sàng.");
 
-// Lắng nghe các kết nối Port mở ra từ Content Script
 chrome.runtime.onConnect.addListener((port) => {
     console.log(`🔌 Đã kết nối với Port: ${port.name}`);
 
-    // Kiểm tra xem có đúng là luồng upload không
     if (port.name === "zalo-upload-stream") {
 
-        // Lắng nghe từng gói tin (chunk/metadata) gửi qua đường ống này
-        port.onMessage.addListener((message) => {
+        // Cấu trúc: Map<fileName, { strategy, uploadUrl, totalSize }>
+        const activeUploadSessions = new Map();
 
-            if (message.type === "INIT_UPLOAD") {
-                console.log("📥 Nhận yêu cầu khởi tạo Upload:", message.payload);
-                // Giả lập việc chuẩn bị Strategy, gọi API...
-                // Sau đó báo lại cho Content Script biết là đã sẵn sàng nhận Data
-                port.postMessage({ type: "READY_FOR_CHUNK", fileId: message.payload.fileName });
+        // Thêm từ khóa 'async' để dùng được 'await' khi gọi API
+        port.onMessage.addListener(async (message) => {
+            try {
+                if (message.type === "INIT_UPLOAD") {
+                    console.log("📥 Nhận yêu cầu khởi tạo Upload:", message.payload);
+                    const { fileName, fileSize, fileType } = message.payload;
+
+                    // TODO (sau này): Lấy targetDrive từ giao diện dropdown người dùng chọn.
+                    // Tạm thời hard-code 'google_drive' để xây dựng luồng.
+                    const targetDrive = 'google_drive';
+
+                    const strategy = StrategyFactory.getStrategy(targetDrive);
+
+                    await strategy.authenticate();
+
+                    const uploadUrl = await strategy.initUpload(fileName, fileSize, fileType);
+
+                    // Lưu lại phiên làm việc này vào bộ nhớ tạm
+                    activeUploadSessions.set(fileName, { strategy, uploadUrl, totalSize: fileSize });
+
+                    port.postMessage({ type: "READY_FOR_CHUNK", fileId: fileName });
+                }
+
+                else if (message.type === "FILE_CHUNK") {
+                    console.log(`🧱 Đang xử lý Chunk số ${message.chunkIndex} của file ${message.fileName}`);
+                    const { fileName, chunkIndex, data } = message;
+
+                    // Lấy lại phiên làm việc của file này
+                    const session = activeUploadSessions.get(fileName);
+                    if (!session) {
+                        throw new Error(`Không tìm thấy phiên upload cho file: ${fileName}`);
+                    }
+
+                    const CHUNK_SIZE = 1048576;
+                    const offset = chunkIndex * CHUNK_SIZE;
+
+                    await session.strategy.uploadChunk(session.uploadUrl, data, offset, session.totalSize);
+
+                    port.postMessage({ type: "CHUNK_UPLOADED", chunkIndex: chunkIndex });
+                }
+
+                else if (message.type === "UPLOAD_COMPLETE") {
+                    console.log(`🎉 Nhận thông báo hoàn tất từ UI cho file: ${message.fileName}`);
+                    activeUploadSessions.delete(message.fileName);
+                }
+
+            } catch (error) {
+                console.error("❌ Lỗi trong quá trình upload:", error);
+                port.postMessage({ type: "UPLOAD_ERROR", message: error.message });
             }
-
-            else if (message.type === "FILE_CHUNK") {
-                console.log(`🧱 Đã nhận Chunk số ${message.chunkIndex} của file. Kích thước: ${message.chunkSize} bytes`);
-                // TODO: Bơm chunk này vào cụm Strategy để đẩy lên Google Drive
-
-                // Giả lập upload thành công chunk này, yêu cầu gửi chunk tiếp theo
-                port.postMessage({ type: "CHUNK_UPLOADED", chunkIndex: message.chunkIndex });
-            }
-
         });
 
-        // Xử lý khi đường ống bị ngắt (người dùng đóng tab hoặc lỗi)
         port.onDisconnect.addListener(() => {
-            console.log("❌ Đường ống kết nối đã bị đóng.");
+            console.log("❌ Đường ống kết nối đã bị đóng. Dọn dẹp RAM.");
+            activeUploadSessions.clear();
         });
     }
 });
