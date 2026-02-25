@@ -174,29 +174,47 @@ function initDragAndDropInterceptor() {
                     reader.readAsDataURL(chunk);
                 };
 
+
                 port.onMessage.addListener((response) => {
                     if (response.type === "READY_FOR_CHUNK") {
-                        console.log(`✅ Background báo [SẴN SÀNG]. Bắt đầu băm file: ${file.name}`);
                         readAndSendNextChunk();
                     }
                     else if (response.type === "CHUNK_UPLOADED") {
                         readAndSendNextChunk();
                     }
+                    else if (response.type === "UPLOAD_SUCCESS") {
+                        console.log(`🎉 Nhận được link từ Background: ${response.link}`);
+                        insertLinkToZaloChat(response.fileName, response.link);
+                    }
                 });
             });
         }
-
-        Array.from(files).forEach((file, index) => {
-            const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-
-            console.log(`--- File ${index + 1} ---`);
-            console.log(`Tên: ${file.name}`);
-            console.log(`Kích thước: ${fileSizeMB} MB`);
-            console.log(`Loại (MIME): ${file.type}`);
-
-            // Todo
-        });
     }, true);
 }
 
 initDragAndDropInterceptor();
+
+function insertLinkToZaloChat(fileName, link) {
+    const chatInput = document.querySelector('#richInput');
+
+    if (chatInput) {
+        chatInput.focus();
+
+        const messageToInsert = `☁️ [Zalo Cloud Extension]\nTên file: ${fileName}\n🔗 Link tải: ${link}\n`;
+
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData('text/plain', messageToInsert);
+
+        const pasteEvent = new ClipboardEvent('paste', {
+            clipboardData: dataTransfer,
+            bubbles: true,
+            cancelable: true
+        });
+
+        chatInput.dispatchEvent(pasteEvent);
+
+        console.log("✅ Đã dán link vào khung chat Zalo bằng Modern API!");
+    } else {
+        console.warn("❌ Không tìm thấy khung chat '#richInput'. Bạn có đang mở một cuộc trò chuyện nào không?");
+    }
+}

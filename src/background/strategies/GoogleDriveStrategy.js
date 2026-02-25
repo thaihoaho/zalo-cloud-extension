@@ -33,14 +33,9 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
             });
         });
     }
-
-    /**
-     * Hàm phụ trợ: Tìm hoặc tạo thư mục trên Google Drive
-     */
     async _getOrCreateFolder(folderName = "Zalo Cloud Extension") {
         console.log(`[GoogleDrive] Đang kiểm tra thư mục: "${folderName}"...`);
 
-        // 1. Tìm xem thư mục đã tồn tại chưa (không lấy các thư mục nằm trong thùng rác)
         const query = encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`);
         const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id, name)`, {
             headers: { Authorization: `Bearer ${this.accessToken}` }
@@ -52,7 +47,6 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
             return searchData.files[0].id;
         }
 
-        // 2. Nếu chưa có, tiến hành tạo mới
         console.log(`[GoogleDrive] Chưa có thư mục, tiến hành tạo mới...`);
         const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
             method: 'POST',
@@ -71,9 +65,6 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
         return createData.id;
     }
 
-    /**
-     * Khởi tạo đường ống Resumable Upload với server Google
-     */
     async initUpload(fileName, fileSize, mimeType) {
         console.log(`[GoogleDrive] Khởi tạo phiên upload cho file: ${fileName}`);
 
@@ -81,7 +72,7 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
 
         const metadata = {
             name: fileName,
-            parents: [folderId] // CHỈ ĐỊNH: Bỏ file này vào trong thư mục vừa tạo
+            parents: [folderId]
         };
 
         // Gọi API xin mở đường ống tải lên (Resumable Upload)
@@ -100,16 +91,67 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
             throw new Error(`Lỗi khởi tạo upload: ${response.statusText}`);
         }
 
-        //Lấy URL đường ống (nằm trong header 'Location' mà Google trả về)
         const uploadUrl = response.headers.get('Location');
-        console.log("[GoogleDrive] Đã thiết lập xong ống nước. URL:", uploadUrl);
+        console.log("[GoogleDrive] Đã thiết lập xong ống. URL:", uploadUrl);
 
         return uploadUrl;
     }
 
     async uploadChunk(uploadUrl, base64Data, offset, totalSize) {
         console.log(`[GoogleDrive] Bơm chunk từ byte ${offset}...`);
-        // TODO: Đẩy data lên
-        return false;
+
+        // Dịch ngược chuỗi Base64 thành Dữ liệu nhị phân (Binary)
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const chunkSize = bytes.length;
+        const endByte = offset + chunkSize - 1;
+
+        const response = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Length': chunkSize.toString(),
+                'Content-Range': `bytes ${offset}-${endByte}/${totalSize}`
+            },
+            body: bytes
+        });
+
+        if (response.status === 308) {
+            // Mã 308 (Resume Incomplete): Google báo "Đã nhận được mảnh này"
+            console.log(`[GoogleDrive] Đã đẩy xong mảnh ${offset} -> ${endByte}. Đang chờ mảnh tiếp theo...`);
+            return false; // Báo hiệu là chưa up xong file
+        }
+
+        if (response.ok) {
+            // Mã 200 hoặc 201: Google báo "Đã nhận được mảnh cuối cùng, ghép file hoàn tất!"
+            const fileData = await response.json();
+            const fileId = fileData.id;
+            console.log(`[GoogleDrive] 🎉 UPLOAD HOÀN TẤT! File ID: ${fileId}`);
+
+            console.log(`[GoogleDrive] Đang mở quyền Public (Anyone with the link) cho file...`);
+            try {
+                await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        role: 'reader',
+                        type: 'anyone'
+                    })
+                });
+                console.log(`[GoogleDrive] 🔓 Đã set quyền Public View thành công!`);
+            } catch (permError) {
+                console.error(`[GoogleDrive] ⚠️ Lỗi khi set quyền (File vẫn up thành công):`, permError);
+            }
+            return `https://drive.google.com/file/d/${fileId}/view`;
+        }
+
+        // Nếu rơi vào các lỗi khác (Mất mạng, file quá lớn, hết dung lượng Drive...)
+        throw new Error(`Lỗi khi đẩy chunk: ${response.status} - ${response.statusText}`);
     }
 }

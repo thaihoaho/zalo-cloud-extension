@@ -18,7 +18,6 @@ chrome.runtime.onConnect.addListener((port) => {
                     console.log("📥 Nhận yêu cầu khởi tạo Upload:", message.payload);
                     const { fileName, fileSize, fileType } = message.payload;
 
-                    // TODO (sau này): Lấy targetDrive từ giao diện dropdown người dùng chọn.
                     // Tạm thời hard-code 'google_drive' để xây dựng luồng.
                     const targetDrive = 'google_drive';
 
@@ -47,9 +46,21 @@ chrome.runtime.onConnect.addListener((port) => {
                     const CHUNK_SIZE = 1048576;
                     const offset = chunkIndex * CHUNK_SIZE;
 
-                    await session.strategy.uploadChunk(session.uploadUrl, data, offset, session.totalSize);
+                    const uploadResult = await session.strategy.uploadChunk(session.uploadUrl, data, offset, session.totalSize);
 
-                    port.postMessage({ type: "CHUNK_UPLOADED", chunkIndex: chunkIndex });
+                    if (typeof uploadResult === 'string') {
+                        console.log(`🚀 File upload thành công, chuẩn bị gửi link về UI: ${uploadResult}`);
+
+                        port.postMessage({
+                            type: "UPLOAD_SUCCESS",
+                            fileName: fileName,
+                            link: uploadResult
+                        });
+
+                        activeUploadSessions.delete(fileName);
+                    } else {
+                        port.postMessage({ type: "CHUNK_UPLOADED", chunkIndex: chunkIndex });
+                    }
                 }
 
                 else if (message.type === "UPLOAD_COMPLETE") {
