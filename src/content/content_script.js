@@ -1,4 +1,4 @@
-console.log("🚀 Zalo Cloud Extension: Lính gác (Giao diện hiện đại) đã sẵn sàng!");
+console.log("🚀 Zalo Cloud Extension: Content Script đã sẵn sàng!");
 
 const modernStyles = `
     #zalo-drive-overlay-container {
@@ -125,8 +125,73 @@ function initDragAndDropInterceptor() {
         const files = dt.files;
 
         if (files && files.length > 0) {
-            console.log(`📦 UI Mới: Đã bắt được ${files.length} file.`);
-            // Todo
+            console.log(`📦 Bắt đầu xử lý ${files.length} file...`);
+
+            Array.from(files).forEach((file, index) => {
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                console.log(`⏳ Đang thiết lập đường ống cho: ${file.name} (${fileSizeMB} MB)`);
+
+                // 1. Mở đường ống kết nối
+                const port = chrome.runtime.connect({ name: "zalo-upload-stream" });
+
+                // Gửi thông tin siêu dữ liệu (Metadata) đi trước
+                port.postMessage({
+                    type: "INIT_UPLOAD",
+                    payload: {
+                        fileName: file.name,
+                        fileSize: file.size,
+                        fileType: file.type
+                    }
+                });
+
+                // 2. Cấu hình cỗ máy băm file (File Chunker)
+                const CHUNK_SIZE = 1024 * 1024; // 1MB - Chuẩn tối ưu cho Google Drive API
+                let offset = 0;
+
+                const readAndSendNextChunk = () => {
+                    // Nếu đã đọc hết file
+                    if (offset >= file.size) {
+                        port.postMessage({ type: "UPLOAD_COMPLETE", fileName: file.name });
+                        console.log(`🎉 Đã bơm toàn bộ file [${file.name}] sang Background thành công!`);
+                        return;
+                    }
+
+                    // Cắt một mảnh từ offset hiện tại
+                    const chunk = file.slice(offset, offset + CHUNK_SIZE);
+                    const reader = new FileReader();
+
+                    reader.onload = (e) => {
+                        // Trình duyệt đọc file dưới dạng Data URL (Base64)
+                        // Ta tách chuỗi để bỏ phần prefix (vd: "data:image/png;base64,") chỉ lấy data
+                        const base64Data = e.target.result.split(',')[1];
+
+                        console.log(`🧱 Đang gửi chunk từ byte ${offset} đến ${offset + chunk.size}...`);
+
+                        port.postMessage({
+                            type: "FILE_CHUNK",
+                            fileName: file.name,
+                            chunkIndex: offset / CHUNK_SIZE,
+                            chunkSize: chunk.size,
+                            data: base64Data
+                        });
+
+                        offset += CHUNK_SIZE; // Tiến con trỏ lên cho chunk tiếp theo
+                    };
+
+                    reader.readAsDataURL(chunk);
+                };
+
+                // 3. Lắng nghe nhịp điệu từ Background Worker để bơm data
+                port.onMessage.addListener((response) => {
+                    if (response.type === "READY_FOR_CHUNK") {
+                        console.log(`✅ Background báo [SẴN SÀNG]. Bắt đầu băm file: ${file.name}`);
+                        readAndSendNextChunk(); // Bơm chunk đầu tiên
+                    }
+                    else if (response.type === "CHUNK_UPLOADED") {
+                        readAndSendNextChunk(); // Bơm chunk tiếp theo khi background gọi
+                    }
+                });
+            });
         }
 
         Array.from(files).forEach((file, index) => {
