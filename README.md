@@ -1,5 +1,6 @@
 "# zalo-cloud-extension" 
 
+```
 zalo-drive-extension/
 │
 ├── manifest.json                 // (1) Khai báo quyền, version, định tuyến các script
@@ -23,3 +24,4 @@ zalo-drive-extension/
 │       └── popup.js              // (7) Lắng nghe nút Login, gọi chrome.identity
 │
 └── assets/                       // Chứa icon của extension (16x16, 48x48, 128x128)
+```
