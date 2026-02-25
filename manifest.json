@@ -29,5 +29,11 @@
     "background": {
         "service_worker": "src/background/service_worker.js",
         "type": "module"
+    },
+    "oauth2": {
+        "client_id": "819026827832-5ruu50dkv4ijvrf46nfinuutpsm6v84m.apps.googleusercontent.com",
+        "scopes": [
+            "https://www.googleapis.com/auth/drive.file"
+        ]
     }
 }
