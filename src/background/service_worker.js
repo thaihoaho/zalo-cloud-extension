@@ -35,16 +35,13 @@ chrome.runtime.onConnect.addListener((port) => {
 
                 else if (message.type === "FILE_CHUNK") {
                     console.log(`🧱 Đang xử lý Chunk số ${message.chunkIndex} của file ${message.fileName}`);
-                    const { fileName, chunkIndex, data } = message;
+                    const { fileName, chunkIndex, data, offset } = message;
 
                     // Lấy lại phiên làm việc của file này
                     const session = activeUploadSessions.get(fileName);
                     if (!session) {
                         throw new Error(`Không tìm thấy phiên upload cho file: ${fileName}`);
                     }
-
-                    const CHUNK_SIZE = 1048576;
-                    const offset = chunkIndex * CHUNK_SIZE;
 
                     const uploadResult = await session.strategy.uploadChunk(session.uploadUrl, data, offset, session.totalSize);
 
