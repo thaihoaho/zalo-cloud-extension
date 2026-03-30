@@ -1,6 +1,7 @@
 // src/background/strategies/StrategyFactory.js
 import GoogleDriveStrategy from './GoogleDriveStrategy.js';
 import OneDriveStrategy from './OneDriveStrategy.js';
+import DropboxStrategy from './DropboxStrategy.js';
 
 export default class StrategyFactory {
 
@@ -16,6 +17,9 @@ export default class StrategyFactory {
 
             case 'onedrive':
                 return new OneDriveStrategy();
+
+            case 'dropbox':
+                return new DropboxStrategy();
 
             default:
                 throw new Error(`[StrategyFactory] Lỗi: Không hỗ trợ nền tảng cloud '${targetDrive}'`);

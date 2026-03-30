@@ -13,7 +13,10 @@
     ],
     "host_permissions": [
         "https://www.googleapis.com/*",
-        "https://graph.microsoft.com/*"
+        "https://graph.microsoft.com/*",
+        "https://www.dropbox.com/*",
+        "https://content.dropboxapi.com/*",
+        "https://api.dropboxapi.com/*"
     ],
     "content_scripts": [
         {
