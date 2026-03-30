@@ -17,4 +17,11 @@ export default class OneDriveStrategy extends ICloudStorageStrategy {
         console.log(`[OneDrive] Bơm chunk từ byte ${offset}...`);
         return false;
     }
+
+    async getStorageQuota() {
+        return {
+            limit: 5 * 1024 * 1024 * 1024, // 5GB giả lập
+            usage: 1.2 * 1024 * 1024 * 1024 // 1.2GB giả lập
+        };
+    }
 }

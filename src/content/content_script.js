@@ -155,6 +155,12 @@ const modernStyles = `
         background: #00c853; /* Thanh chuyển xanh lá đặc */
         animation: none; /* Dừng chuyển động gradient */
     }
+
+    /* Trạng thái Lỗi */
+    .upload-toast.error .toast-percent { color: #ff5252; font-size: 11px; }
+    .upload-toast.error .toast-file-icon { background: #ffebee; }
+    .upload-toast.error .toast-file-icon svg { fill: #ff5252; }
+    .upload-toast.error .progress-fill { background: #ff5252; animation: none; }
 `;
 
 const cloudSvgIcon = `
@@ -219,9 +225,14 @@ function initDragAndDropInterceptor() {
         if (files && files.length > 0) {
             console.log(`📦 Bắt đầu xử lý ${files.length} file...`);
 
-            Array.from(files).forEach((file, index) => {
+            const totalFiles = files.length;
+            let finishedCount = 0;
+            const successResults = [];
+
+            const fileList = Array.from(files);
+
+            fileList.forEach((file) => {
                 const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                console.log(`⏳ Đang thiết lập đường ống cho: ${file.name} (${fileSizeMB} MB)`);
 
                 const port = chrome.runtime.connect({ name: "zalo-upload-stream" });
 
@@ -234,12 +245,11 @@ function initDragAndDropInterceptor() {
                     }
                 });
 
-                const CHUNK_SIZE = 5 * 1024 * 1024; // Cục 5MB 
                 let offset = 0;
                 let fakeProgressInterval = null;
-
+                let estimatedChunkDuration = 4000;
                 let chunkStartTime = 0;
-                let estimatedChunkDuration = 4000; // Giả định cục đầu tiên mất 4s
+                const CHUNK_SIZE = 5 * 1024 * 1024;
 
                 const readAndSendNextChunk = () => {
                     if (offset >= file.size) {
@@ -268,12 +278,9 @@ function initDragAndDropInterceptor() {
                     }, stepTime);
 
                     const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const base64Data = e.target.result.split(',')[1];
-
-                        // Bắt đầu bấm giờ trước khi ném cho Background
+                    reader.onload = (ev) => {
+                        const base64Data = ev.target.result.split(',')[1];
                         chunkStartTime = Date.now();
-
                         port.postMessage({
                             type: "FILE_CHUNK",
                             fileName: file.name,
@@ -287,12 +294,10 @@ function initDragAndDropInterceptor() {
                     reader.readAsDataURL(chunk);
                 };
 
-
                 port.onMessage.addListener((response) => {
                     if (response.type === "READY_FOR_CHUNK" || response.type === "CHUNK_UPLOADED") {
                         if (chunkStartTime > 0) {
                             const timeTaken = Date.now() - chunkStartTime;
-                            // Cập nhật lại tốc độ cho chunk tiếp theo (cộng dồn trung bình để mượt hơn)
                             estimatedChunkDuration = (estimatedChunkDuration + timeTaken) / 2;
                         }
                         readAndSendNextChunk();
@@ -301,8 +306,28 @@ function initDragAndDropInterceptor() {
                         clearInterval(fakeProgressInterval);
                         updateToastProgress(response.fileName, 100);
 
-                        console.log(`🎉 Nhận được link từ Background: ${response.link}`);
-                        insertLinkToZaloChat(response.fileName, response.link);
+                        successResults.push({ name: response.fileName, link: response.link });
+                        finishedCount++;
+
+                        console.log(`[Bulk] ${finishedCount}/${totalFiles} hoàn tất.`);
+                        if (finishedCount === totalFiles) {
+                            insertBulkLinksToZaloChat(successResults);
+                            if (successResults.length > 0) {
+                                showSuccessSummaryToast(successResults.length);
+                            }
+                        }
+                    }
+                    else if (response.type === "UPLOAD_ERROR") {
+                        clearInterval(fakeProgressInterval);
+                        showErrorToast(response.fileName || file.name, response.message);
+
+                        finishedCount++;
+                        if (finishedCount === totalFiles) {
+                            if (successResults.length > 0) {
+                                insertBulkLinksToZaloChat(successResults);
+                                showSuccessSummaryToast(successResults.length);
+                            }
+                        }
                     }
                 });
             });
@@ -310,31 +335,69 @@ function initDragAndDropInterceptor() {
     }, true);
 }
 
+function showSuccessSummaryToast(count) {
+    const container = document.getElementById('zalo-cloud-toast-container');
+    const summaryId = "toast-summary-" + Date.now();
+
+    const toast = document.createElement('div');
+    toast.id = summaryId;
+    toast.className = 'upload-toast success show';
+    toast.style.padding = "12px 20px";
+
+    toast.innerHTML = `
+        <div class="toast-header" style="margin-bottom: 0;">
+            <div class="toast-left-col">
+                <div class="toast-file-icon" style="width: 24px; height: 24px;">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
+                </div>
+                <span class="toast-filename" style="font-size: 14px;">🎉 Đã tải lên thành công ${count} file!</span>
+            </div>
+        </div>
+    `;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 500);
+    }, 5000);
+}
+
+function showErrorToast(fileName, errorMsg) {
+    updateToastProgress(fileName, -1, errorMsg);
+}
+
 initDragAndDropInterceptor();
 
-function insertLinkToZaloChat(fileName, link) {
+function insertBulkLinksToZaloChat(results) {
+    if (!results || results.length === 0) return;
+
     const chatInput = document.querySelector('#richInput');
-
-    if (chatInput) {
-        chatInput.focus();
-
-        const messageToInsert = `☁️ [Zalo Cloud Extension]\n📃 Tên file: ${fileName}\n🔗 Link: ${link}\n`;
-
-        const dataTransfer = new DataTransfer();
-        dataTransfer.setData('text/plain', messageToInsert);
-
-        const pasteEvent = new ClipboardEvent('paste', {
-            clipboardData: dataTransfer,
-            bubbles: true,
-            cancelable: true
-        });
-
-        chatInput.dispatchEvent(pasteEvent);
-
-        console.log("✅ Đã dán link vào khung chat Zalo bằng Modern API!");
-    } else {
-        console.warn("❌ Không tìm thấy khung chat '#richInput'. Bạn có đang mở một cuộc trò chuyện nào không?");
+    if (!chatInput) {
+        console.warn("❌ Không tìm thấy khung chat '#richInput'.");
+        return;
     }
+
+    chatInput.focus();
+
+    let messageToInsert = `☁️ Zalo Cloud Sync\n`;
+    messageToInsert += `──────────────────\n`;
+
+    results.forEach((item, index) => {
+        messageToInsert += `📄 ${item.name}\n🔗 ${item.link}\n${index < results.length - 1 ? '\n' : ''}`;
+    });
+
+    const dataTransfer = new DataTransfer();
+    dataTransfer.setData('text/plain', messageToInsert);
+
+    const pasteEvent = new ClipboardEvent('paste', {
+        clipboardData: dataTransfer,
+        bubbles: true,
+        cancelable: true
+    });
+
+    chatInput.dispatchEvent(pasteEvent);
+    console.log(`✅ Đã dán ${results.length} link vào khung chat.`);
 }
 
 function updateToastProgress(fileName, percent) {
@@ -374,6 +437,19 @@ function updateToastProgress(fileName, percent) {
 
     percentText.innerText = `${percent}%`;
     fillBar.style.width = `${percent}%`;
+
+    if (percent === -1) {
+        toast.classList.add('error');
+        percentText.innerText = "Lỗi: " + (arguments[2] || "Xác thực");
+        fillBar.style.width = "100%";
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            setTimeout(() => toast.remove(), 6000);
+        }, 5000);
+        return;
+    }
 
     if (percent >= 100 && !toast.classList.contains('success')) {
         toast.classList.add('success');

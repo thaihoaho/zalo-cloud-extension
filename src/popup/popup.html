@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zalo Cloud Settings</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="../../assets/icon-128.png" alt="Logo" class="logo">
+            <h1>Zalo Cloud Sync</h1>
+        </header>
+
+        <section class="storage-section">
+            <div class="storage-header">
+                <span class="storage-label">Dung lượng bộ nhớ</span>
+                <span id="storage-text" class="storage-value">Đang tải...</span>
+            </div>
+            <div class="progress-container">
+                <div id="storage-progress" class="progress-bar" style="width: 0%"></div>
+            </div>
+        </section>
+
+        <section class="settings-section">
+            <label for="drive-select">Lưu trữ trên:</label>
+            <select id="drive-select">
+                <option value="google_drive">Google Drive</option>
+                <option value="onedrive">Microsoft OneDrive</option>
+            </select>
+        </section>
+
+        <footer>
+            <p class="status" id="status-msg">Cài đặt được tự động lưu</p>
+        </footer>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

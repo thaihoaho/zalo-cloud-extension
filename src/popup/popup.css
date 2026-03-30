@@ -1,0 +1,109 @@
+:root {
+    --primary-color: #0088ff;
+    --bg-color: #f8f9fa;
+    --text-color: #333;
+    --border-radius: 12px;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    width: 300px;
+    margin: 0;
+    padding: 20px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.logo {
+    width: 32px;
+    height: 32px;
+}
+
+h1 {
+    font-size: 18px;
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.storage-section {
+    background: #fff;
+    padding: 15px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.storage-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.storage-label {
+    font-weight: 600;
+}
+
+.storage-value {
+    color: #666;
+}
+
+.progress-container {
+    height: 8px;
+    background-color: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #00c6ff, var(--primary-color));
+    transition: width 0.5s ease-in-out;
+}
+
+.settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+label {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+select {
+    padding: 10px;
+    border-radius: var(--border-radius);
+    border: 1px solid #ddd;
+    background-color: #fff;
+    cursor: pointer;
+    outline: none;
+}
+
+select:focus {
+    border-color: var(--primary-color);
+}
+
+footer {
+    text-align: center;
+}
+
+.status {
+    font-size: 11px;
+    color: #888;
+    margin: 0;
+}

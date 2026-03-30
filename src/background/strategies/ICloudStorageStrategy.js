@@ -36,4 +36,12 @@ export default class ICloudStorageStrategy {
     async uploadChunk(uploadUrl, base64Data, offset, totalSize) {
         throw new Error("Method 'uploadChunk()' bắt buộc phải được implement.");
     }
+
+    /**
+     * 4. Lấy thông tin dung lượng bộ nhớ
+     * @returns {Promise<{limit: number, usage: number}>}
+     */
+    async getStorageQuota() {
+        throw new Error("Method 'getStorageQuota()' bắt buộc phải được implement.");
+    }
 }
