@@ -35,3 +35,30 @@ export default class StrategyFactory {
             return activeStrategies; // Trả về MẢNG
         }
     }
+    static getStrategies(targets) {
+        // Chuẩn hóa đầu vào thành mảng
+        const targetList = Array.isArray(targets) ? targets : [targets];
+
+        const activeStrategies = [];
+
+        for (const target of targetList) {
+            switch (target) {
+                case 'google_drive':
+                    activeStrategies.push(new GoogleDriveStrategy());
+                    break;
+
+                case 'onedrive':
+                    activeStrategies.push(new OneDriveStrategy());
+                    break;
+
+                case 'dropbox':
+                    return new DropboxStrategy();
+
+                default:
+                    throw new Error(`[StrategyFactory] Lỗi: Không hỗ trợ nền tảng cloud '${targetDrive}'`);
+            }
+
+            return activeStrategies; // Trả về MẢNG
+        }
+    }
+}
