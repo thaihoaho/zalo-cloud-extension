@@ -4,25 +4,34 @@ import OneDriveStrategy from './OneDriveStrategy.js';
 import DropboxStrategy from './DropboxStrategy.js';
 
 export default class StrategyFactory {
-
     /**
-     * Hàm tĩnh (static) để khởi tạo Strategy dựa trên khóa (key)
-     * @param {string} targetDrive - "google_drive" hoặc "onedrive"
-     * @returns {ICloudStorageStrategy} Đối tượng xử lý tương ứng
+     * Khởi tạo các Strategy dựa trên danh sách các nền tảng được chọn
+     * @param {string | string[]} targets - Ví dụ: "google_drive", "onedrive"
+     * @returns {ICloudStorageStrategy[]} Mảng các đối tượng xử lý (Strategies)
      */
-    static getStrategy(targetDrive) {
-        switch (targetDrive) {
-            case 'google_drive':
-                return new GoogleDriveStrategy();
+    static getStrategies(targets) {
+        // Chuẩn hóa đầu vào thành mảng
+        const targetList = Array.isArray(targets) ? targets : [targets];
 
-            case 'onedrive':
-                return new OneDriveStrategy();
+        const activeStrategies = [];
 
-            case 'dropbox':
-                return new DropboxStrategy();
+        for (const target of targetList) {
+            switch (target) {
+                case 'google_drive':
+                    activeStrategies.push(new GoogleDriveStrategy());
+                    break;
 
-            default:
-                throw new Error(`[StrategyFactory] Lỗi: Không hỗ trợ nền tảng cloud '${targetDrive}'`);
+                case 'onedrive':
+                    activeStrategies.push(new OneDriveStrategy());
+                    break;
+
+                case 'dropbox':
+                    return new DropboxStrategy();
+
+                default:
+                    throw new Error(`[StrategyFactory] Lỗi: Không hỗ trợ nền tảng cloud '${targetDrive}'`);
+            }
+
+            return activeStrategies; // Trả về MẢNG
         }
     }
-}

@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (async () => {
             try {
                 const result = await chrome.storage.sync.get(['preferred_drive']);
-                const targetDrive = result.preferred_drive || 'google_drive';
+                const targetDrive = result.preferred_drive || 'google_drive' ;
                 const strategy = StrategyFactory.getStrategy(targetDrive);
                 const quota = await strategy.getStorageQuota();
                 sendResponse({ success: true, quota });
@@ -38,9 +38,8 @@ chrome.runtime.onConnect.addListener((port) => {
                 uploadQueue.enqueue(async () => {
                     try {
                         const result = await chrome.storage.sync.get(['preferred_drive']);
-                        const targetDrive = result.preferred_drive || 'google_drive';
-                        const strategy = StrategyFactory.getStrategy(targetDrive);
-
+                        const targetDrive = result.preferred_drive || 'google_drive'; 
+                        const strategy = StrategyFactory.getStrategies(targetDrive)[0];
                         const uploadUrl = await strategy.initUpload(fileName, fileSize, fileType);
                         activeUploadSessions.set(fileName, { strategy, uploadUrl, totalSize: fileSize });
 
