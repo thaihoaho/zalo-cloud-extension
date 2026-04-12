@@ -1,6 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Zalo Cloud upload extension",
+    "key": "BgIAAACkAABSU0ExAAgAAAEAAQDhhIsOFCtFSHjHNnHM4RYQd+V1404mn1DQ6BPWqGGirUku4JMgDxrwGj+9Okb95hnHMeaCORHKu1FhyLz//FMA3FLp1ApdB9iuawvJcRtyGIhn7JW1b0A+JwekE6juIJkrGHqMAdV4F7iQfGVrndhp+ulP045lkoQvSqPbj10IUkuqCvRYwVDsXjmJZUHFrfEw1ldWM7lxBDLoaaOlu+DzCKK1y4K5HJjNMV1QtqAimtTmx3MllPol+QEORrovlR/ubNI2mddYHIw/rpNJWQIEQCN4B3eqUCVtrcPvj2YPT6O/nQnqFwgOy3wRqEE6W5khZfnUAlUSfZPaMIRSV+nJ",
     "version": "1.0.0",
     "description": "Bắt file kéo thả trên Zalo Web và upload lên Google Drive/OneDrive.",
     "icons": {
@@ -36,7 +37,8 @@
     "oauth2": {
         "client_id": "819026827832-5ruu50dkv4ijvrf46nfinuutpsm6v84m.apps.googleusercontent.com",
         "scopes": [
-            "https://www.googleapis.com/auth/drive.file"
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive.metadata.readonly"
         ]
     },
     "action": {

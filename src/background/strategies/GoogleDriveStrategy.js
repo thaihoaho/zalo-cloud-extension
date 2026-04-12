@@ -6,54 +6,62 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
     constructor() {
         super();
         this.accessToken = null;
+        this.authPromise = null;
     }
 
     async authenticate(interactive = false) {
-        // 1. Kiểm tra RAM
-        if (this.accessToken && !interactive) return this.accessToken;
+        if (this.authPromise) return this.authPromise;
 
-        // 2. Kiểm tra Storage (để tránh login lại sau khi tắt trình duyệt)
-        const cached = await chrome.storage.local.get(['gd_token', 'gd_token_expiry']);
-        const now = Date.now();
-        if (cached.gd_token && cached.gd_token_expiry > now && !interactive) {
-            this.accessToken = cached.gd_token;
-            return this.accessToken;
-        }
+        this.authPromise = (async () => {
+            try {
+                if (this.accessToken && !interactive) return this.accessToken;
 
-        console.log(`[GoogleDrive] Đang xác thực qua WebAuthFlow (interactive: ${interactive})...`);
-        
-        const manifest = chrome.runtime.getManifest();
-        const clientId = manifest.oauth2.client_id;
-        const scopes = encodeURIComponent(manifest.oauth2.scopes.join(' '));
-        const redirectUri = encodeURIComponent(chrome.identity.getRedirectURL());
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=token&redirect_uri=${redirectUri}&scope=${scopes}`;
-
-        return new Promise((resolve, reject) => {
-            chrome.identity.launchWebAuthFlow({ url: authUrl, interactive }, async (responseUrl) => {
-                if (chrome.runtime.lastError || !responseUrl) {
-                    return reject(new Error(chrome.runtime.lastError ? chrome.runtime.lastError.message : "Cần đăng nhập để tiếp tục."));
+                const cached = await chrome.storage.local.get(['gd_token', 'gd_token_expiry']);
+                const now = Date.now();
+                if (cached.gd_token && cached.gd_token_expiry > now && !interactive) {
+                    this.accessToken = cached.gd_token;
+                    return this.accessToken;
                 }
 
-                const url = new URL(responseUrl.replace('#', '?'));
-                const token = url.searchParams.get('access_token');
-                const expiresIn = url.searchParams.get('expires_in') || 3600;
+                console.log(`[GoogleDrive] Đang xác thực qua WebAuthFlow (interactive: ${interactive})...`);
 
-                if (token) {
-                    this.accessToken = token;
-                    // Lưu vào storage, trừ đi 5 phút trừ hao
-                    const expiryTime = Date.now() + (parseInt(expiresIn) - 300) * 1000;
-                    await chrome.storage.local.set({ 
-                        gd_token: token, 
-                        gd_token_expiry: expiryTime 
+                const manifest = chrome.runtime.getManifest();
+                const clientId = manifest.oauth2.client_id;
+                const scopes = encodeURIComponent(manifest.oauth2.scopes.join(' '));
+                const redirectUri = encodeURIComponent(chrome.identity.getRedirectURL());
+                const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=token&redirect_uri=${redirectUri}&scope=${scopes}`;
+
+                return await new Promise((resolve, reject) => {
+                    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive }, async (responseUrl) => {
+                        if (chrome.runtime.lastError || !responseUrl) {
+                            return reject(new Error(chrome.runtime.lastError ? chrome.runtime.lastError.message : "Cần đăng nhập để tiếp tục."));
+                        }
+
+                        const url = new URL(responseUrl.replace('#', '?'));
+                        const token = url.searchParams.get('access_token');
+                        const expiresIn = url.searchParams.get('expires_in') || 3600;
+
+                        if (token) {
+                            this.accessToken = token;
+                            // Lưu vào storage, trừ đi 5 phút trừ hao
+                            const expiryTime = Date.now() + (parseInt(expiresIn) - 300) * 1000;
+                            await chrome.storage.local.set({
+                                gd_token: token,
+                                gd_token_expiry: expiryTime
+                            });
+                            resolve(token);
+                        } else {
+                            reject(new Error("Không tìm thấy Access Token trong phản hồi."));
+                        }
                     });
-                    resolve(token);
-                } else {
-                    reject(new Error("Không tìm thấy Access Token trong phản hồi."));
-                }
-            });
-        });
-    }
+                });
+            } finally {
+                this.authPromise = null;
+            }
+        })();
 
+        return this.authPromise;
+    }
     async _fetchWithAuth(url, options = {}) {
         // Thử lấy token từ cache/storage trước (non-interactive)
         if (!this.accessToken) {
@@ -161,14 +169,17 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
         if (response.ok) {
             const fileData = await response.json();
             const fileId = fileData.id;
-            
-            // Mở quyền Public
-            await this._fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role: 'reader', type: 'anyone' })
-            });
-            
+
+            try {
+                await this._fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+                });
+            } catch (e) {
+                console.warn("[GoogleDrive] Không thể mở quyền chia sẻ (có thể do giới hạn Workspace):", e);
+            }
+
             return `https://drive.google.com/file/d/${fileId}/view`;
         }
 
@@ -176,13 +187,25 @@ export default class GoogleDriveStrategy extends ICloudStorageStrategy {
     }
 
     async getStorageQuota() {
-        const response = await this._fetchWithAuth('https://www.googleapis.com/drive/v3/about?fields=storageQuota');
-        if (!response.ok) throw new Error(`Lỗi lấy dung lượng: ${response.statusText}`);
+        try {
+            const response = await this._fetchWithAuth('https://www.googleapis.com/drive/v3/about?fields=storageQuota');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`Google API Error: ${response.status} ${response.statusText}. ${errorData.error?.message || ''}`);
+            }
 
-        const data = await response.json();
-        return {
-            limit: parseInt(data.storageQuota.limit),
-            usage: parseInt(data.storageQuota.usage)
-        };
+            const data = await response.json();
+            if (!data.storageQuota) {
+                throw new Error("Không tìm thấy thông tin dung lượng trong phản hồi từ Google.");
+            }
+
+            return {
+                limit: data.storageQuota.limit ? parseInt(data.storageQuota.limit) : 15 * 1024 * 1024 * 1024, // Mặc định 15GB nếu không giới hạn/không lấy được
+                usage: data.storageQuota.usage ? parseInt(data.storageQuota.usage) : 0
+            };
+        } catch (error) {
+            console.error("[GoogleDrive] Lỗi lấy quota:", error);
+            throw error;
+        }
     }
 }
